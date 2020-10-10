@@ -8,6 +8,9 @@ from prometheus_client.core import REGISTRY, CounterMetricFamily, \
     GaugeMetricFamily
 from prometheus_client import start_http_server
 
+_LINK_STATE_ACTIVE = 1.0
+_LINK_STATE_DOWN = 0.0
+_LINK_STATE_UNKNOWN = -1.0
 
 class InfinibandCollector(object):
     def __init__(self, can_reset_counter, input_file, node_name_map):
@@ -221,11 +224,19 @@ class InfinibandCollector(object):
         port = m_port.group(2)
         counters = self.parse_counter(m_port.group(3))
 
+        def _update_link_state(state):
+            return self.metrics["link_state"].add_metric([
+                switch_name,
+                guid,
+                port],
+                state)
+
         if 'Active' in link:
             if m_port.group(2) == '0':
                 # Internal IB port for the SM, ignore it
                 pass
             else:
+                _update_link_state(_LINK_STATE_ACTIVE)
                 m_link = re.search(r'Link info:\s+(?P<LID>\d+)\s+(?P<port>\d+).*(?P<Width>\d)X\s+(?P<Speed>[\d+\.]*) Gbps Active\/  LinkUp.*(?P<remote_GUID>0x\w+)\s+(?P<remote_LID>\d+)\s+(?P<remote_port>\d+).*\"(?P<node_name>.*)\"', link)  # noqa: E501
                 for gauge in self.gauge_info.keys():
                     self.metrics[gauge].add_metric([
@@ -250,8 +261,9 @@ class InfinibandCollector(object):
                     if counters[counter] >= 2 ** (self.counter_info[counter]['bits'] - 1):  # noqa: E501
                         self.reset_counter(guid, port, counter)
         elif 'Down' in link:
-            pass
+            _update_link_state(_LINK_STATE_DOWN)
         else:
+            _update_link_state(_LINK_STATE_UNKNOWN)
             print('Unknown link state')
 
     def collect(self):
@@ -306,6 +318,14 @@ class InfinibandCollector(object):
                     'remote_port',
                     'remote_name'
                 ])
+        self.metrics["link_state"] = GaugeMetricFamily(
+                'infiniband_link_state',
+                "Postive if the the link is active, zero if the link is down, or negative if the state is unknown.",
+                labels=[
+                    'local_name',
+                    'local_guid',
+                    'local_port',
+                ])
 
         for sw in switches:
             switch_name = sw[1]
@@ -317,6 +337,7 @@ class InfinibandCollector(object):
             yield self.metrics[counter_name]
         for gauge_name in self.gauge_info.keys():
             yield self.metrics[gauge_name]
+        yield self.metrics["link_state"]
 
 
 if __name__ == '__main__':
