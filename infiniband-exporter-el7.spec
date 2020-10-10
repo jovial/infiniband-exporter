@@ -1,13 +1,13 @@
 Name:	  infiniband-exporter
-Version:  0.0.2
-%global gittag 0.0.2
+%define build_timestamp %(date +"%Y.%m.%d")
+Version:  %{build_timestamp}+git
+%define NVdir   %{name}-%{version}
 Release:  1%{?dist}
 Summary:  Prometheus exporter for a Infiniband Fabric
 
 License:  Apache License 2.0
-URL:      https://github.com/guilbaults/infiniband-exporter
-Source0:  https://github.com/guilbaults/%{name}/archive/v%{gittag}/%{name}-%{version}.tar.gz
-
+URL:      https://github.com/jovial/infiniband-exporter
+Source0:  https://github.com/jovial/infiniband-exporter
 BuildArch:      noarch
 BuildRequires:	systemd
 Requires:       python2-prometheus_client
@@ -23,16 +23,18 @@ When a node name map file is provided, it will be used by ibquerryerror to put a
 This exporter takes 3 seconds to collect the information of 60+ IB switches, and 900+ compute nodes. The information takes about 7.5MB in ASCII format for that fabric.
 
 %prep
-%autosetup -n %{name}-%{gittag}
-%setup -q
+rm -rf %{NVdir}
+git clone %{url}.git %{NVdir}
+cd %{NVdir}
 
 %build
 
 %install
+cd %{NVdir}
 mkdir -p %{buildroot}/%{_bindir}
 mkdir -p %{buildroot}/%{_unitdir}
 
-sed -i -e '1i#!/usr/bin/python' infiniband-exporter.py
+sed -i -e '1i#!/usr/bin/python2' infiniband-exporter.py
 install -m 0755 %{name}.py %{buildroot}/%{_bindir}/%{name}
 install -m 0644 infiniband-exporter.service %{buildroot}/%{_unitdir}/infiniband-exporter.service
 
